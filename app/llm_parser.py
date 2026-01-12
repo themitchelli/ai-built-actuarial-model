@@ -6,7 +6,11 @@ Uses Claude to extract actuarial parameters from free-form text input.
 
 import os
 import json
+from dotenv import load_dotenv
 import anthropic
+
+# Load environment variables from .env file
+load_dotenv()
 from .models import Assumptions, ParseResponse
 
 
