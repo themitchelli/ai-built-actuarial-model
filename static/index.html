@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actuarial Model Projection Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .table-container table {
+            border-collapse: collapse;
+        }
+        .table-container th {
+            position: sticky;
+            top: 0;
+            background: #1f2937;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-white mb-2">Actuarial Model Projection Tool</h1>
+            <p class="text-gray-400">Term life insurance cashflow projections using natural language input</p>
+        </header>
+
+        <!-- Input Section -->
+        <section class="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Enter Assumptions</h2>
+            <div class="mb-4">
+                <label for="input" class="block text-sm font-medium text-gray-300 mb-2">
+                    Describe your policy in natural language:
+                </label>
+                <textarea
+                    id="input"
+                    rows="3"
+                    class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 1,000 policies, £100k sum assured, 10-year term, age 40, standard mortality, 3% interest, £50 monthly premium"
+                ></textarea>
+            </div>
+            <div class="flex gap-4">
+                <button
+                    id="parseBtn"
+                    class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                >
+                    Parse & Review
+                </button>
+                <button
+                    id="runBtn"
+                    class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled
+                >
+                    Run Projection
+                </button>
+            </div>
+        </section>
+
+        <!-- Parsed Assumptions Section -->
+        <section id="assumptionsSection" class="bg-gray-800 rounded-lg p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4">Parsed Assumptions</h2>
+            <div id="assumptionsGrid" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <!-- Filled dynamically -->
+            </div>
+            <div id="parseError" class="mt-4 p-4 bg-red-900/50 border border-red-700 rounded-lg text-red-200 hidden">
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section id="resultsSection" class="bg-gray-800 rounded-lg p-6 mb-6 hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Projection Results</h2>
+                <button
+                    id="downloadBtn"
+                    class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors"
+                >
+                    Download CSV
+                </button>
+            </div>
+
+            <!-- Summary Cards -->
+            <div id="summaryCards" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <!-- Filled dynamically -->
+            </div>
+
+            <!-- Data Table -->
+            <div class="table-container rounded-lg border border-gray-700">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-gray-300">
+                            <th class="px-4 py-3">Month</th>
+                            <th class="px-4 py-3">Year</th>
+                            <th class="px-4 py-3">Age</th>
+                            <th class="px-4 py-3 text-right">In Force</th>
+                            <th class="px-4 py-3 text-right">Deaths</th>
+                            <th class="px-4 py-3 text-right">Premiums</th>
+                            <th class="px-4 py-3 text-right">Claims</th>
+                            <th class="px-4 py-3 text-right">Net Cashflow</th>
+                            <th class="px-4 py-3 text-right">Reserve</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTable" class="text-gray-200">
+                        <!-- Filled dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Loading Overlay -->
+        <div id="loading" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
+            <div class="bg-gray-800 rounded-lg p-6 flex items-center gap-4">
+                <svg class="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span id="loadingText">Processing...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentAssumptions = null;
+        let currentProjection = null;
+
+        // DOM Elements
+        const inputEl = document.getElementById('input');
+        const parseBtn = document.getElementById('parseBtn');
+        const runBtn = document.getElementById('runBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const assumptionsSection = document.getElementById('assumptionsSection');
+        const assumptionsGrid = document.getElementById('assumptionsGrid');
+        const parseError = document.getElementById('parseError');
+        const resultsSection = document.getElementById('resultsSection');
+        const summaryCards = document.getElementById('summaryCards');
+        const resultsTable = document.getElementById('resultsTable');
+        const loading = document.getElementById('loading');
+        const loadingText = document.getElementById('loadingText');
+
+        // Utility functions
+        function showLoading(text) {
+            loadingText.textContent = text;
+            loading.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loading.classList.add('hidden');
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('en-GB', {
+                style: 'currency',
+                currency: 'GBP',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(value);
+        }
+
+        function formatNumber(value, decimals = 2) {
+            return new Intl.NumberFormat('en-GB', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            }).format(value);
+        }
+
+        function formatPercent(value) {
+            return (value * 100).toFixed(2) + '%';
+        }
+
+        // Parse button click handler
+        parseBtn.addEventListener('click', async () => {
+            const text = inputEl.value.trim();
+            if (!text) {
+                alert('Please enter some assumptions');
+                return;
+            }
+
+            showLoading('Parsing assumptions with AI...');
+            parseError.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentAssumptions = result.assumptions;
+                    displayAssumptions(result.assumptions);
+                    runBtn.disabled = false;
+                    resultsSection.classList.add('hidden');
+                } else {
+                    parseError.textContent = result.error;
+                    parseError.classList.remove('hidden');
+                    runBtn.disabled = true;
+                }
+            } catch (error) {
+                parseError.textContent = 'Error: ' + error.message;
+                parseError.classList.remove('hidden');
+                runBtn.disabled = true;
+            } finally {
+                hideLoading();
+            }
+        });
+
+        // Display parsed assumptions
+        function displayAssumptions(assumptions) {
+            const fields = [
+                { key: 'num_policies', label: 'Policies', format: v => formatNumber(v, 0) },
+                { key: 'sum_assured', label: 'Sum Assured', format: formatCurrency },
+                { key: 'term_years', label: 'Term', format: v => v + ' years' },
+                { key: 'entry_age', label: 'Entry Age', format: v => v + ' years' },
+                { key: 'interest_rate', label: 'Interest Rate', format: formatPercent },
+                { key: 'monthly_premium', label: 'Monthly Premium', format: formatCurrency }
+            ];
+
+            assumptionsGrid.innerHTML = fields.map(field => `
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">${field.label}</div>
+                    <div class="text-xl font-semibold">${field.format(assumptions[field.key])}</div>
+                </div>
+            `).join('');
+
+            assumptionsSection.classList.remove('hidden');
+        }
+
+        // Run projection button click handler
+        runBtn.addEventListener('click', async () => {
+            if (!currentAssumptions) return;
+
+            showLoading('Running projection...');
+
+            try {
+                const response = await fetch('/api/project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ assumptions: currentAssumptions })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Projection failed');
+                }
+
+                currentProjection = await response.json();
+                displayResults(currentProjection);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        // Display projection results
+        function displayResults(projection) {
+            // Summary cards
+            const summary = projection.summary;
+            summaryCards.innerHTML = `
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">Total Premiums</div>
+                    <div class="text-xl font-semibold text-green-400">${formatCurrency(summary.total_premiums)}</div>
+                </div>
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">Total Claims</div>
+                    <div class="text-xl font-semibold text-red-400">${formatCurrency(summary.total_claims)}</div>
+                </div>
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">Total Deaths</div>
+                    <div class="text-xl font-semibold">${formatNumber(summary.total_deaths, 2)}</div>
+                </div>
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="text-gray-400 text-sm">Peak Reserve</div>
+                    <div class="text-xl font-semibold text-blue-400">${formatCurrency(summary.peak_reserve)}</div>
+                </div>
+            `;
+
+            // Table rows
+            resultsTable.innerHTML = projection.rows.map(row => `
+                <tr class="border-t border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-2">${row.month}</td>
+                    <td class="px-4 py-2">${row.year}</td>
+                    <td class="px-4 py-2">${row.age}</td>
+                    <td class="px-4 py-2 text-right">${formatNumber(row.policies_start, 2)}</td>
+                    <td class="px-4 py-2 text-right">${formatNumber(row.deaths, 4)}</td>
+                    <td class="px-4 py-2 text-right text-green-400">${formatCurrency(row.premiums)}</td>
+                    <td class="px-4 py-2 text-right text-red-400">${formatCurrency(row.claims)}</td>
+                    <td class="px-4 py-2 text-right ${row.net_cashflow >= 0 ? 'text-green-400' : 'text-red-400'}">
+                        ${formatCurrency(row.net_cashflow)}
+                    </td>
+                    <td class="px-4 py-2 text-right text-blue-400">${formatCurrency(row.reserve)}</td>
+                </tr>
+            `).join('');
+
+            resultsSection.classList.remove('hidden');
+        }
+
+        // Download CSV button click handler
+        downloadBtn.addEventListener('click', async () => {
+            if (!currentAssumptions) return;
+
+            showLoading('Generating CSV...');
+
+            try {
+                const response = await fetch('/api/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ assumptions: currentAssumptions })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Export failed');
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'projection.csv';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        });
+
+        // Pre-fill example on page load
+        inputEl.value = '1,000 policies, £100k sum assured, 10-year term, age 40, standard mortality, 3% interest, £50 monthly premium';
+    </script>
+</body>
+</html>
