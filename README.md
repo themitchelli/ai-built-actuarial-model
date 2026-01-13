@@ -8,6 +8,7 @@ A web-based actuarial projection tool for term life insurance that accepts natur
 - **AI-Powered Parsing**: Uses Claude to extract structured assumptions from free-form text
 - **ELT17 Mortality Table**: Standard UK mortality table (English Life Table No. 17) from ONS
 - **Month-by-Month Projections**: Calculates deaths, premiums, claims, and reserves for each month
+- **CPU/GPU Compute Options**: Run projections on CPU or GPU
 - **CSV Export**: Download the complete cashflow table for further analysis
 - **Activity Tracking**: View execution history with timestamps, response times, and full request/response data
 
