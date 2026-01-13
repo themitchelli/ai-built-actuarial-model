@@ -67,6 +67,18 @@ class ProjectionResult(BaseModel):
     assumptions: Assumptions
     rows: list[ProjectionRow]
     summary: "ProjectionSummary"
+    compute_mode_requested: str = Field(
+        default="cpu",
+        description="Compute mode requested by user"
+    )
+    compute_mode_actual: str = Field(
+        default="cpu",
+        description="Actual compute mode used"
+    )
+    gpu_note: Optional[str] = Field(
+        default=None,
+        description="Note about GPU status if GPU was requested"
+    )
 
 
 class ProjectionSummary(BaseModel):
@@ -99,3 +111,7 @@ class ProjectRequest(BaseModel):
     """Request to run a projection."""
 
     assumptions: Assumptions
+    compute_mode: str = Field(
+        default="cpu",
+        description="Compute mode: 'cpu' or 'gpu'"
+    )

@@ -5,6 +5,7 @@ Tracks all /api/parse and /api/project calls with:
 - Timestamp, IP address, action type
 - Tokens used, elapsed time
 - Inputs and outputs
+- Compute mode (requested vs actual)
 """
 
 import sqlite3
@@ -51,7 +52,9 @@ def init_db():
                 input_data TEXT,
                 output_data TEXT,
                 success INTEGER DEFAULT 1,
-                error_message TEXT
+                error_message TEXT,
+                compute_mode_requested TEXT,
+                compute_mode_actual TEXT
             )
         """)
         conn.execute("""
@@ -63,6 +66,21 @@ def init_db():
             ON executions(action_type)
         """)
 
+        # Migration: Add compute_mode columns if they don't exist
+        _migrate_add_compute_columns(conn)
+
+
+def _migrate_add_compute_columns(conn: sqlite3.Connection):
+    """Add compute_mode columns if they don't exist (migration)."""
+    cursor = conn.execute("PRAGMA table_info(executions)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    if 'compute_mode_requested' not in columns:
+        conn.execute("ALTER TABLE executions ADD COLUMN compute_mode_requested TEXT")
+
+    if 'compute_mode_actual' not in columns:
+        conn.execute("ALTER TABLE executions ADD COLUMN compute_mode_actual TEXT")
+
 
 def log_execution(
     action_type: str,
@@ -72,7 +90,9 @@ def log_execution(
     input_data: Optional[dict] = None,
     output_data: Optional[dict] = None,
     success: bool = True,
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
+    compute_mode_requested: Optional[str] = None,
+    compute_mode_actual: Optional[str] = None
 ) -> str:
     """
     Log an API execution to the database.
@@ -86,8 +106,9 @@ def log_execution(
         conn.execute("""
             INSERT INTO executions
             (id, timestamp, ip_address, action_type, tokens_used, elapsed_ms,
-             input_data, output_data, success, error_message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             input_data, output_data, success, error_message,
+             compute_mode_requested, compute_mode_actual)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             execution_id,
             timestamp,
@@ -98,7 +119,9 @@ def log_execution(
             json.dumps(input_data) if input_data else None,
             json.dumps(output_data) if output_data else None,
             1 if success else 0,
-            error_message
+            error_message,
+            compute_mode_requested,
+            compute_mode_actual
         ))
 
     return execution_id
@@ -109,7 +132,8 @@ def get_all_executions(limit: int = 100, offset: int = 0) -> list[dict]:
     with get_db() as conn:
         cursor = conn.execute("""
             SELECT id, timestamp, ip_address, action_type, tokens_used,
-                   elapsed_ms, success, error_message
+                   elapsed_ms, success, error_message,
+                   compute_mode_requested, compute_mode_actual
             FROM executions
             ORDER BY timestamp DESC
             LIMIT ? OFFSET ?
@@ -155,7 +179,8 @@ def get_stats() -> dict:
                 SUM(tokens_used) as total_tokens,
                 AVG(elapsed_ms) as avg_elapsed_ms,
                 SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
-                SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count
+                SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count,
+                SUM(CASE WHEN compute_mode_requested = 'gpu' THEN 1 ELSE 0 END) as gpu_requested_count
             FROM executions
         """)
         row = cursor.fetchone()

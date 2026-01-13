@@ -48,20 +48,32 @@
                     placeholder="e.g., 1,000 policies, £100k sum assured, 10-year term, age 40, standard mortality, 3% interest, £50 monthly premium"
                 ></textarea>
             </div>
-            <div class="flex gap-4">
+            <div class="flex flex-wrap gap-4 items-start">
                 <button
                     id="parseBtn"
                     class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
                 >
                     Parse & Review
                 </button>
-                <button
-                    id="runBtn"
-                    class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled
-                >
-                    Run Projection
-                </button>
+                <div class="flex gap-2">
+                    <button
+                        id="runCpuBtn"
+                        class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled
+                    >
+                        Run on CPU
+                    </button>
+                    <div class="flex flex-col">
+                        <button
+                            id="runGpuBtn"
+                            class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled
+                        >
+                            Run on GPU
+                        </button>
+                        <span class="text-xs text-gray-500 mt-1">GPU: Coming soon (Radeon Pro 580x 8GB)</span>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -135,7 +147,8 @@
         // DOM Elements
         const inputEl = document.getElementById('input');
         const parseBtn = document.getElementById('parseBtn');
-        const runBtn = document.getElementById('runBtn');
+        const runCpuBtn = document.getElementById('runCpuBtn');
+        const runGpuBtn = document.getElementById('runGpuBtn');
         const downloadBtn = document.getElementById('downloadBtn');
         const assumptionsSection = document.getElementById('assumptionsSection');
         const assumptionsGrid = document.getElementById('assumptionsGrid');
@@ -199,17 +212,20 @@
                 if (result.success) {
                     currentAssumptions = result.assumptions;
                     displayAssumptions(result.assumptions);
-                    runBtn.disabled = false;
+                    runCpuBtn.disabled = false;
+                    runGpuBtn.disabled = false;
                     resultsSection.classList.add('hidden');
                 } else {
                     parseError.textContent = result.error;
                     parseError.classList.remove('hidden');
-                    runBtn.disabled = true;
+                    runCpuBtn.disabled = true;
+                    runGpuBtn.disabled = true;
                 }
             } catch (error) {
                 parseError.textContent = 'Error: ' + error.message;
                 parseError.classList.remove('hidden');
-                runBtn.disabled = true;
+                runCpuBtn.disabled = true;
+                runGpuBtn.disabled = true;
             } finally {
                 hideLoading();
             }
@@ -236,17 +252,21 @@
             assumptionsSection.classList.remove('hidden');
         }
 
-        // Run projection button click handler
-        runBtn.addEventListener('click', async () => {
+        // Run projection function (accepts compute_mode)
+        async function runProjection(computeMode) {
             if (!currentAssumptions) return;
 
-            showLoading('Running projection...');
+            const modeLabel = computeMode === 'gpu' ? 'GPU' : 'CPU';
+            showLoading(`Running projection on ${modeLabel}...`);
 
             try {
                 const response = await fetch('/api/project', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ assumptions: currentAssumptions })
+                    body: JSON.stringify({
+                        assumptions: currentAssumptions,
+                        compute_mode: computeMode
+                    })
                 });
 
                 if (!response.ok) {
@@ -256,12 +276,23 @@
 
                 currentProjection = await response.json();
                 displayResults(currentProjection);
+
+                // Show GPU note if applicable
+                if (currentProjection.gpu_note) {
+                    alert(currentProjection.gpu_note);
+                }
             } catch (error) {
                 alert('Error: ' + error.message);
             } finally {
                 hideLoading();
             }
-        });
+        }
+
+        // CPU button click handler
+        runCpuBtn.addEventListener('click', () => runProjection('cpu'));
+
+        // GPU button click handler
+        runGpuBtn.addEventListener('click', () => runProjection('gpu'));
 
         // Display projection results
         function displayResults(projection) {

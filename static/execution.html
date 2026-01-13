@@ -75,6 +75,23 @@
                 <pre id="errorContent" class="text-red-300 bg-gray-900 p-4 rounded"></pre>
             </section>
 
+            <!-- Compute Mode (for project actions only) -->
+            <section id="computeSection" class="bg-gray-800 rounded-lg p-6 hidden">
+                <h2 class="text-xl font-semibold mb-4">Compute Mode</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-gray-400 text-sm">Requested</div>
+                        <div id="computeRequested" class="text-lg font-semibold"></div>
+                    </div>
+                    <div>
+                        <div class="text-gray-400 text-sm">Actual</div>
+                        <div id="computeActual" class="text-lg font-semibold"></div>
+                    </div>
+                </div>
+                <div id="computeNote" class="mt-4 p-3 bg-yellow-900/30 border border-yellow-800 rounded text-yellow-200 text-sm hidden">
+                </div>
+            </section>
+
             <!-- Input Data -->
             <section class="bg-gray-800 rounded-lg p-6">
                 <h2 class="text-xl font-semibold mb-4">Input Data</h2>
@@ -168,6 +185,42 @@
                     const errorSection = document.getElementById('errorSection');
                     errorSection.classList.remove('hidden');
                     document.getElementById('errorContent').textContent = data.error_message;
+                }
+
+                // Show compute mode section for project actions
+                if (data.action_type === 'project') {
+                    const computeSection = document.getElementById('computeSection');
+                    computeSection.classList.remove('hidden');
+
+                    const requested = data.compute_mode_requested || 'cpu';
+                    const actual = data.compute_mode_actual || 'cpu';
+
+                    document.getElementById('computeRequested').innerHTML = `
+                        <span class="px-2 py-1 rounded text-sm ${
+                            requested === 'gpu'
+                                ? 'bg-green-900 text-green-200'
+                                : 'bg-blue-900 text-blue-200'
+                        }">
+                            ${requested.toUpperCase()}
+                        </span>
+                    `;
+
+                    document.getElementById('computeActual').innerHTML = `
+                        <span class="px-2 py-1 rounded text-sm ${
+                            actual === 'gpu'
+                                ? 'bg-green-900 text-green-200'
+                                : 'bg-blue-900 text-blue-200'
+                        }">
+                            ${actual.toUpperCase()}
+                        </span>
+                    `;
+
+                    // Show note if GPU was requested but ran on CPU
+                    if (requested === 'gpu' && actual === 'cpu') {
+                        const computeNote = document.getElementById('computeNote');
+                        computeNote.classList.remove('hidden');
+                        computeNote.textContent = 'GPU acceleration is planned for a future release. This projection ran on CPU.';
+                    }
                 }
 
                 // Input data

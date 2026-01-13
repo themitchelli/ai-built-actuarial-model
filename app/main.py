@@ -95,15 +95,35 @@ async def run_projection_endpoint(request: ProjectRequest, req: Request):
     Run a projection with the given assumptions.
 
     Returns month-by-month cashflow projections.
+    Accepts optional compute_mode ('cpu' or 'gpu'), defaults to 'cpu'.
+    Note: GPU mode currently runs on CPU (coming soon).
     """
     start_time = time.time()
     client_ip = get_client_ip(req)
+
+    # Get requested compute mode (default to 'cpu')
+    compute_mode_requested = request.compute_mode.lower() if request.compute_mode else 'cpu'
+    if compute_mode_requested not in ('cpu', 'gpu'):
+        compute_mode_requested = 'cpu'
+
+    # For now, always run on CPU
+    compute_mode_actual = 'cpu'
+
+    # GPU note if GPU was requested
+    gpu_note = None
+    if compute_mode_requested == 'gpu':
+        gpu_note = 'GPU acceleration coming soon - ran on CPU'
 
     try:
         result = run_projection(request.assumptions)
         elapsed_ms = (time.time() - start_time) * 1000
 
-        # Log the execution
+        # Add compute mode info to result
+        result.compute_mode_requested = compute_mode_requested
+        result.compute_mode_actual = compute_mode_actual
+        result.gpu_note = gpu_note
+
+        # Log the execution with compute mode
         db.log_execution(
             action_type="project",
             ip_address=client_ip,
@@ -114,14 +134,16 @@ async def run_projection_endpoint(request: ProjectRequest, req: Request):
                 "summary": result.summary.model_dump(),
                 "row_count": len(result.rows)
             },
-            success=True
+            success=True,
+            compute_mode_requested=compute_mode_requested,
+            compute_mode_actual=compute_mode_actual
         )
 
         return result
     except Exception as e:
         elapsed_ms = (time.time() - start_time) * 1000
 
-        # Log the error
+        # Log the error with compute mode
         db.log_execution(
             action_type="project",
             ip_address=client_ip,
@@ -129,7 +151,9 @@ async def run_projection_endpoint(request: ProjectRequest, req: Request):
             elapsed_ms=elapsed_ms,
             input_data=request.assumptions.model_dump(),
             success=False,
-            error_message=str(e)
+            error_message=str(e),
+            compute_mode_requested=compute_mode_requested,
+            compute_mode_actual=compute_mode_actual
         )
 
         raise HTTPException(status_code=400, detail=str(e))

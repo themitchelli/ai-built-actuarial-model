@@ -72,6 +72,7 @@
                         <tr class="text-left text-gray-300">
                             <th class="px-4 py-3">Timestamp</th>
                             <th class="px-4 py-3">Action</th>
+                            <th class="px-4 py-3">Compute</th>
                             <th class="px-4 py-3">IP Address</th>
                             <th class="px-4 py-3 text-right">Elapsed (ms)</th>
                             <th class="px-4 py-3 text-center">Status</th>
@@ -80,7 +81,7 @@
                     </thead>
                     <tbody id="executionsTable" class="text-gray-200">
                         <tr>
-                            <td colspan="6" class="px-4 py-8 text-center text-gray-400">Loading...</td>
+                            <td colspan="7" class="px-4 py-8 text-center text-gray-400">Loading...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -151,7 +152,7 @@
             } catch (error) {
                 executionsTable.innerHTML = `
                     <tr>
-                        <td colspan="6" class="px-4 py-8 text-center text-red-400">
+                        <td colspan="7" class="px-4 py-8 text-center text-red-400">
                             Error loading executions: ${error.message}
                         </td>
                     </tr>
@@ -167,11 +168,30 @@
                 stats.avg_elapsed_ms ? formatElapsed(stats.avg_elapsed_ms) : '-';
         }
 
+        function getComputeBadge(exec) {
+            // Only show compute badge for project actions
+            if (exec.action_type !== 'project') {
+                return '<span class="text-gray-500">-</span>';
+            }
+
+            const requested = exec.compute_mode_requested || 'cpu';
+            const actual = exec.compute_mode_actual || 'cpu';
+
+            if (requested === 'gpu' && actual === 'cpu') {
+                // GPU requested but ran on CPU
+                return `<span class="px-2 py-1 rounded text-xs font-medium bg-green-900 text-green-200 cursor-help" title="GPU requested - ran on CPU (GPU coming soon)">GPU*</span>`;
+            } else if (requested === 'gpu') {
+                return '<span class="px-2 py-1 rounded text-xs font-medium bg-green-900 text-green-200">GPU</span>';
+            } else {
+                return '<span class="px-2 py-1 rounded text-xs font-medium bg-blue-900 text-blue-200">CPU</span>';
+            }
+        }
+
         function renderTable(executions) {
             if (!executions || executions.length === 0) {
                 executionsTable.innerHTML = `
                     <tr>
-                        <td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-400">
                             No executions yet. Run a parse or projection to see activity.
                         </td>
                     </tr>
@@ -191,6 +211,7 @@
                             ${exec.action_type}
                         </span>
                     </td>
+                    <td class="px-4 py-3">${getComputeBadge(exec)}</td>
                     <td class="px-4 py-3 font-mono text-sm">${exec.ip_address || '-'}</td>
                     <td class="px-4 py-3 text-right">${formatElapsed(exec.elapsed_ms)}</td>
                     <td class="px-4 py-3 text-center">
