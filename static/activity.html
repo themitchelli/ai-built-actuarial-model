@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Dashboard - Actuarial Model</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .table-container {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .table-container table {
+            border-collapse: collapse;
+        }
+        .table-container th {
+            position: sticky;
+            top: 0;
+            background: #1f2937;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Navigation -->
+        <nav class="mb-6 flex gap-4">
+            <a href="/" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">Home</a>
+            <a href="/activity" class="px-4 py-2 bg-blue-600 rounded-lg">Activity</a>
+        </nav>
+
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-white mb-2">Activity Dashboard</h1>
+            <p class="text-gray-400">View all API executions and their details</p>
+        </header>
+
+        <!-- Stats Cards -->
+        <section id="statsSection" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gray-800 rounded-lg p-4">
+                <div class="text-gray-400 text-sm">Total Executions</div>
+                <div id="statTotal" class="text-2xl font-semibold">-</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <div class="text-gray-400 text-sm">Parse Calls</div>
+                <div id="statParse" class="text-2xl font-semibold text-blue-400">-</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <div class="text-gray-400 text-sm">Project Calls</div>
+                <div id="statProject" class="text-2xl font-semibold text-green-400">-</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <div class="text-gray-400 text-sm">Avg Response Time</div>
+                <div id="statAvgTime" class="text-2xl font-semibold text-purple-400">-</div>
+            </div>
+        </section>
+
+        <!-- Executions Table -->
+        <section class="bg-gray-800 rounded-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Execution History</h2>
+                <button
+                    id="refreshBtn"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                >
+                    Refresh
+                </button>
+            </div>
+
+            <div class="table-container rounded-lg border border-gray-700">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-gray-300">
+                            <th class="px-4 py-3">Timestamp</th>
+                            <th class="px-4 py-3">Action</th>
+                            <th class="px-4 py-3">IP Address</th>
+                            <th class="px-4 py-3 text-right">Elapsed (ms)</th>
+                            <th class="px-4 py-3 text-center">Status</th>
+                            <th class="px-4 py-3 text-center">Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="executionsTable" class="text-gray-200">
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-gray-400">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div id="pagination" class="flex justify-between items-center mt-4">
+                <div id="pageInfo" class="text-gray-400 text-sm"></div>
+                <div class="flex gap-2">
+                    <button
+                        id="prevBtn"
+                        class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled
+                    >
+                        Previous
+                    </button>
+                    <button
+                        id="nextBtn"
+                        class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled
+                    >
+                        Next
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const LIMIT = 20;
+        let currentOffset = 0;
+        let totalCount = 0;
+
+        const executionsTable = document.getElementById('executionsTable');
+        const pageInfo = document.getElementById('pageInfo');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const refreshBtn = document.getElementById('refreshBtn');
+
+        function formatTimestamp(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function formatElapsed(ms) {
+            if (ms < 1000) {
+                return ms.toFixed(0) + ' ms';
+            }
+            return (ms / 1000).toFixed(2) + ' s';
+        }
+
+        async function loadExecutions() {
+            try {
+                const response = await fetch(`/api/executions?limit=${LIMIT}&offset=${currentOffset}`);
+                const data = await response.json();
+
+                totalCount = data.total;
+                updateStats(data.stats);
+                renderTable(data.executions);
+                updatePagination();
+            } catch (error) {
+                executionsTable.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-red-400">
+                            Error loading executions: ${error.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function updateStats(stats) {
+            document.getElementById('statTotal').textContent = stats.total_executions || 0;
+            document.getElementById('statParse').textContent = stats.parse_count || 0;
+            document.getElementById('statProject').textContent = stats.project_count || 0;
+            document.getElementById('statAvgTime').textContent =
+                stats.avg_elapsed_ms ? formatElapsed(stats.avg_elapsed_ms) : '-';
+        }
+
+        function renderTable(executions) {
+            if (!executions || executions.length === 0) {
+                executionsTable.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                            No executions yet. Run a parse or projection to see activity.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            executionsTable.innerHTML = executions.map(exec => `
+                <tr class="border-t border-gray-700 hover:bg-gray-700/50">
+                    <td class="px-4 py-3">${formatTimestamp(exec.timestamp)}</td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 rounded text-xs font-medium ${
+                            exec.action_type === 'parse'
+                                ? 'bg-blue-900 text-blue-200'
+                                : 'bg-green-900 text-green-200'
+                        }">
+                            ${exec.action_type}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 font-mono text-sm">${exec.ip_address || '-'}</td>
+                    <td class="px-4 py-3 text-right">${formatElapsed(exec.elapsed_ms)}</td>
+                    <td class="px-4 py-3 text-center">
+                        ${exec.success
+                            ? '<span class="text-green-400">Success</span>'
+                            : '<span class="text-red-400">Error</span>'
+                        }
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        <a
+                            href="/execution/${exec.id}"
+                            class="text-blue-400 hover:text-blue-300 underline"
+                        >
+                            View
+                        </a>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updatePagination() {
+            const start = currentOffset + 1;
+            const end = Math.min(currentOffset + LIMIT, totalCount);
+            pageInfo.textContent = totalCount > 0
+                ? `Showing ${start}-${end} of ${totalCount}`
+                : 'No executions';
+
+            prevBtn.disabled = currentOffset === 0;
+            nextBtn.disabled = currentOffset + LIMIT >= totalCount;
+        }
+
+        prevBtn.addEventListener('click', () => {
+            if (currentOffset >= LIMIT) {
+                currentOffset -= LIMIT;
+                loadExecutions();
+            }
+        });
+
+        nextBtn.addEventListener('click', () => {
+            if (currentOffset + LIMIT < totalCount) {
+                currentOffset += LIMIT;
+                loadExecutions();
+            }
+        });
+
+        refreshBtn.addEventListener('click', () => {
+            currentOffset = 0;
+            loadExecutions();
+        });
+
+        // Initial load
+        loadExecutions();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadExecutions, 30000);
+    </script>
+</body>
+</html>
