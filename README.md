@@ -9,12 +9,14 @@ A web-based actuarial projection tool for term life insurance that accepts natur
 - **ELT17 Mortality Table**: Standard UK mortality table (English Life Table No. 17) from ONS
 - **Month-by-Month Projections**: Calculates deaths, premiums, claims, and reserves for each month
 - **CSV Export**: Download the complete cashflow table for further analysis
+- **Activity Tracking**: View execution history with timestamps, response times, and full request/response data
 
 ## Tech Stack
 
 - **Backend**: Python, FastAPI, Uvicorn
 - **Frontend**: HTML, JavaScript, Tailwind CSS
 - **LLM**: Anthropic Claude API
+- **Database**: SQLite (activity logging)
 - **Data Processing**: Pandas
 
 ## Installation
@@ -67,9 +69,13 @@ A web-based actuarial projection tool for term life insurance that accepts natur
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | Web interface |
+| `/activity` | GET | Activity dashboard |
+| `/execution/{id}` | GET | Execution detail page |
 | `/api/parse` | POST | Parse natural language to structured assumptions |
 | `/api/project` | POST | Run projection with given assumptions |
 | `/api/export` | POST | Download CSV of projection results |
+| `/api/executions` | GET | List all executions (with stats) |
+| `/api/executions/{id}` | GET | Get execution details |
 | `/docs` | GET | Swagger API documentation |
 
 ## Projection Model
@@ -94,12 +100,15 @@ qx_monthly = 1 - (1 - qx_annual)^(1/12)
 ├── app/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI application
+│   ├── database.py          # SQLite activity logging
 │   ├── llm_parser.py        # Natural language parsing with Claude
 │   ├── models.py            # Pydantic data models
 │   ├── mortality_tables.py  # ELT17 mortality data
 │   └── projection_engine.py # Actuarial calculations
 ├── static/
-│   └── index.html           # Web interface
+│   ├── index.html           # Web interface
+│   ├── activity.html        # Activity dashboard
+│   └── execution.html       # Execution detail page
 ├── .env                     # API key (not in repo)
 ├── .gitignore
 ├── requirements.txt
